@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhoneBrain Pro</title></head>
+<body style="font-family:sans-serif; padding:15px; background:#eef2ff">
+<h2>🧠 PhoneBrain Pro</h2>
+<p id="welcome"></p>
+<div id="chat" style="background:white; padding:15px; border-radius:10px; min-height:250px; border:1px solid #ddd"></div><br>
+<input id="msg" style="width:70%; padding:12px" placeholder="যেকোনো সমস্যা লেখো...">
+<button onclick="send()" style="padding:12px">পাঠাও</button><br><br>
+<label style="background:#25D366; color:white; padding:12px; border-radius:8px">📷 ছবি তুলে দেখাও
+<input type="file" accept="image/*" capture="camera" id="cam" style="display:none" onchange="seePhoto(event)">
+</label>
+<script>
+const GEMINI_KEY = "PASTE_YOUR_GEMINI_KEY_HERE";
+let myName = localStorage.getItem("pb_name");
+let myMemory = JSON.parse(localStorage.getItem("pb_memory") || "[]");
+if(!myName){
+  myName = prompt("তোমার নাম কী? PhoneBrain তোমাকে মনে রাখবে");
+  if(myName) localStorage.setItem("pb_name", myName);
+}
+document.getElementById('welcome').innerText = "আসসালামু আলাইকুম " + (myName||"বন্ধু") + "! আমি তোমাকে চিনি।";
+function saveMemory(t){
+  myMemory.push(t);
+  if(myMemory.length > 30) myMemory.shift();
+  localStorage.setItem("pb_memory", JSON.stringify(myMemory));
+}
+async function thinkSmart(problem){
+  let prompt = `তুমি PhoneBrain Pro। ব্যবহারকারীর নাম ${myName}। আগের কথা: ${myMemory.join(" | ")}। সমস্যা: ${problem}। বাংলায় সহজ করে ৩টা সমাধান দাও।`;
+  if(!GEMINI_KEY || GEMINI_KEY.includes("PASTE")){
+    return "বুঝলাম " + myName + "। ১) সমস্যাটাকে ১ লাইনে ভাগ করো ২) আজকেই একটা ছোট কাজ দিয়ে শুরু করো ৩) একজন অভিজ্ঞ মানুষকে জিজ্ঞেস করো।";
+  }
+  try{
+    let res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({contents:[{parts:[{text: prompt}]}]})
+    });
+    let data = await res.json();
+    return data.candidates[0].content.parts[0].text;
+  }catch(e){ return "নেটে সমস্যা হচ্ছে, আবার চেষ্টা করো।"; }
+}
+async function send(){
+  let input = document.getElementById('msg');
+  let m = input.value; if(!m) return;
+  let c = document.getElementById('chat');
+  c.innerHTML += "<p><b>" + myName + ":</b> " + m + "</p><p><i>চিন্তা করছি...</i></p>";
+  saveMemory(m);
+  let reply = await thinkSmart(m);
+  c.innerHTML = c.innerHTML.replace("<p><i>চিন্তা করছি...</i></p>", "");
+  c.innerHTML += "<p><b>PhoneBrain:</b> " + reply.replace(/\n/g,"<br>") + "</p>";
+  input.value = "";
+}
+async function seePhoto(event){
+  let c = document.getElementById('chat');
+  c.innerHTML += "<p><b>" + myName + ":</b> 📷 ছবি পাঠিয়েছে</p><p><i>ছবিটা দেখছি...</i></p>";
+  let file = event.target.files[0];
+  let reader = new FileReader();
+  reader.onload = async function(){
+    let base64 = reader.result.split(",")[1];
+    if(!GEMINI_KEY || GEMINI_KEY.includes("PASTE")){
+      c.innerHTML = c.innerHTML.replace("<p><i>ছবিটা দেখছি...</i></p>", "");
+      c.innerHTML += "<p><b>PhoneBrain:</b> ছবিতে মানুষ আছে বলে মনে হচ্ছে। API Key বসালে আমি বলতে পারবো ছেলে নাকি মেয়ে, বয়স কেমন।</p>";
+      return;
+    }
+    try{
+      let res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({contents:[{parts:[{text:"এই ছবিতে কী দেখছো? কয়জন মানুষ? ছেলে নাকি মেয়ে? বাংলায় বলো।"}, {inline_data:{mime_type: file.type, data: base64}}]}]})
+      });
+      let data = await res.json();
+      let reply = data.candidates[0].content.parts[0].text;
+      c.innerHTML = c.innerHTML.replace("<p><i>ছবিটা দেখছি...</i></p>", "");
+      c.innerHTML += "<p><b>PhoneBrain দেখলো:</b> " + reply.replace(/\n/g,"<br>") + "</p>";
+    }catch(e){ c.innerHTML += "<p>ছবি দেখতে সমস্যা হচ্ছে।</p>"; }
+  };
+  reader.readAsDataURL(file);
+}
+</script>
+</body></html>
